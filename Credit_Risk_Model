@@ -1,0 +1,110 @@
+#### Predicting Loan Defaults #####
+
+import pandas as pd
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+def train_default_prediction_model(data):
+    # Split data into features and target
+    X = data.drop(['customer_id','default'], axis=1)
+    y = data['default']
+
+    # Split data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Train a Gradient Boosting Classifier model
+    model = GradientBoostingClassifier()
+    model.fit(X_train, y_train)
+
+    return model
+
+def estimate_default_probability(model, loan_properties):
+    # Create a pandas dataframe from the loan properties
+    loan_data = pd.DataFrame([loan_properties], columns=['credit_lines_outstanding', 'loan_amt_outstanding', 'total_debt_outstanding', 'income', 'years_employed', 'fico_score'])
+
+    # Use the trained model to predict the probability of default
+    probability_of_default = model.predict_proba(loan_data)[:, 1]
+
+    return probability_of_default
+
+def calculate_expected_loss(probability_of_default, loan_amount, recovery_rate=0.1):
+    expected_loss = probability_of_default * loan_amount * (1 - recovery_rate)
+    return expected_loss
+
+# Example usage:
+data = pd.read_csv('loan_Data.csv')  # Load the loan data from a CSV file
+model = train_default_prediction_model(data)
+
+loan_properties = {
+    'credit_lines_outstanding': 5,
+    'loan_amt_outstanding': 1958,
+    'total_debt_outstanding': 8228,
+    'income': 25000,
+    'years_employed': 2,
+    'fico_score': 572
+}
+
+probability_of_default = estimate_default_probability(model, loan_properties)
+expected_loss = calculate_expected_loss(probability_of_default, loan_properties['loan_amt_outstanding'])
+
+print('Probability of default: ', probability_of_default)
+print('Expected Loss: ', expected_loss)
+
+
+################################################################################################################
+
+
+##### Probability of Default based on fico_score #####
+
+import pandas as pd
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import LabelEncoder
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+
+# Assuming df is your dataset
+df = pd.read_csv('loan_Data.csv')
+
+# Create KMeans model with 5 clusters (you can adjust the number of clusters as needed)
+kmeans = KMeans(n_clusters=5)
+
+# Fit the model to the fico_score column
+kmeans.fit(df[['fico_score']])
+
+# Create a new column 'fico_rating' with the cluster labels
+df['fico_rating'] = kmeans.labels_
+
+# Encode the default column (0 for no default, 1 for default)
+le = LabelEncoder()
+df['default_encoded'] = le.fit_transform(df['default'])
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(df[['fico_rating']], df['default_encoded'], test_size=0.2, random_state=42)
+
+# Train a logistic regression model
+log_reg = LogisticRegression()
+log_reg.fit(X_train, y_train)
+
+# Define a function to predict the probability of default
+def predict_default(fico_score):
+    # Create a new dataframe with the input fico_score
+    new_df = pd.DataFrame({'fico_score': [fico_score]})
+
+    # Predict the fico_rating using the KMeans model
+    new_df['fico_rating'] = kmeans.predict(new_df[['fico_score']])
+
+    # Predict the probability of default using the logistic regression model
+    probability = log_reg.predict_proba(new_df[['fico_rating']])[:, 1]
+
+    return probability[0]
+
+# Test the function
+fico_score = 600  # input fico score of the new borrower
+probability = predict_default(fico_score)
+print(f'Probability of default for fico score {fico_score}: {probability:.2f}')
+
+if probability >= 0.5:
+    print("The borrower is likely to default.")
+else:
+    print("The borrower is not likely to default.")
